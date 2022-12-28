@@ -1,0 +1,77 @@
+Amazon Linux 2 Steps: 
+- based on https://docs.aws.amazon.com/iot/latest/developerguide/creating-a-virtual-thing.html up to certificate, do not install Node.js and IoT Device SDK for JavaScript
+- based on https://github.com/aws/aws-iot-device-sdk-python-v2 for installing IoT Device SDK for Python
+
+Basics:
+ - SG allows SSH (22) and MQTT (8883) from CORP
+ - Assign ec2_admin IAM Role (AdministratorAccess)
+ - sudo yum update -y
+ - sudo yum install git -y
+ - aws configure (configure AWS CLI only with region)
+ - aws iot describe-endpoint --endpoint-type iot:Data-ATS
+
+IoT Specifics:
+- create an AWS IoT thing object in your Linux instance
+    aws iot create-thing --thing-name "SensorAA"
+
+- create and attach AWS IoT keys and certificates in your Linux instance
+
+- download a copy of the Amazon certificate authority (CA) certificate
+    mkdir ~/certs
+    curl -o ~/certs/Amazon-root-CA-1.pem https://www.amazontrust.com/repository/AmazonRootCA1.pem 
+
+- create your private key, public key, and X.509 certificate files. This command also registers and activates the certificate with AWS IoT.
+    aws iot create-keys-and-certificate \
+    --set-as-active \
+    --certificate-pem-outfile "~/certs/device.pem.crt" \
+    --public-key-outfile "~/certs/public.pem.key" \
+    --private-key-outfile "~/certs/private.pem.key"
+
+- save the certificateArn from the previous command output 
+    arn:aws:iot:eu-central-1:955331079577:cert/a45a09617db951d5c596627122a38ac54cd42fc4e991b86a89db420100041316
+
+- attach your thing object to the certificate
+    aws iot attach-thing-principal \
+    --thing-name "SensorAA" \
+    --principal "arn:aws:iot:eu-central-1:955331079577:cert/a45a09617db951d5c596627122a38ac54cd42fc4e991b86a89db420100041316"
+
+- create and attach a policy
+    vi ~/policy.json
+    {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": [
+                    "iot:Publish",
+                    "iot:Subscribe",
+                    "iot:Receive",
+                    "iot:Connect"
+                ],
+                "Resource": [
+                    "*"
+                ]
+            }
+        ]
+    }
+
+- create your policy
+    aws iot create-policy \
+    --policy-name "SensorAAPolicy" \
+    --policy-document "file://~/policy.json"
+
+- attach the policy to your virtual device's certificate
+    aws iot attach-policy \
+    --policy-name "SensorAAPolicy" \
+    --target "arn:aws:iot:eu-central-1:955331079577:cert/a45a09617db951d5c596627122a38ac54cd42fc4e991b86a89db420100041316"
+
+- Install the AWS IoT Device SDK for Python - https://github.com/aws/aws-iot-device-sdk-python-v2
+    python3 -m pip install awsiotsdk
+
+- Clone project repository
+    git clone https://github.com/paoloromagnoli/sensor.git
+    python3 -m pip install numpy
+
+- edit endpoint in the start.sh script with your region endpoint
+    aws iot describe-endpoint --endpoint-type iot:Data-ATS
+        andwzt2wkzx42-ats.iot.eu-central-1.amazonaws.com --> Frankfurt
